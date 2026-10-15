@@ -66,6 +66,7 @@ local weaponBlocked = false
 --signals
 local SIG_Restore = 1
 local SIG_Walk = 2
+local SIG_MOONWALK = 4
 
 local PACE = 0.8
 
@@ -109,6 +110,7 @@ local JUMP_TURN_SPEED = math.pi/80 -- matches jump_delay_turn_scale in unitdef
 local isFiring = false
 local resetRestore = false
 local jumpActive = false
+local jumpWindup = false
 
 -- Effects
 local dirtfling = 1024
@@ -163,9 +165,10 @@ local function DoRestore()
 	lastTorsoHeading = 0
 end
 
-local function Step(frontLeg, backLeg, impactFoot, pelvisMult)
+local function Step(frontLeg, backLeg, pelvisMult)
 	local speed = math.max(0.05, GG.att_MoveChange[unitID] or 1)
 	mainLeg, offLeg = offLeg, mainLeg
+	impactFoot = (mainLeg == leftLeg) and rfoot or lfoot
 	
 	-- contact: legs fully extended in stride
 	for i,p in pairs(frontLeg) do
@@ -191,6 +194,13 @@ local function Step(frontLeg, backLeg, impactFoot, pelvisMult)
 	Move(pelvis, y_axis, PELVIS_LOWER_HEIGHT, PELVIS_LOWER_SPEED * pelvisMult * speed)
 	Turn(torso, x_axis, TORSO_TILT_ANGLE, TORSO_TILT_SPEED * speed)
 
+	Sleep(800)
+	if impactFoot == lfoot then
+		GG.UnitScriptDistortion(unitID, unitDefID, "leftfoot")
+	else
+		GG.UnitScriptDistortion(unitID, unitDefID, "rightfoot")
+	end
+	EmitSfx(impactFoot, 1024)
 	for i, p in pairs(frontLeg) do
 		WaitForTurn(frontLeg[i], x_axis)
 		WaitForTurn(backLeg[i], x_axis)
@@ -202,7 +212,6 @@ local function Step(frontLeg, backLeg, impactFoot, pelvisMult)
 		Turn(frontLeg[i], x_axis, LEG_STRAIGHT_ANGLES[i], LEG_STRAIGHT_SPEEDS[i] * speed)
 		Turn(backLeg[i], x_axis, LEG_BENT_ANGLES[i], LEG_BENT_SPEEDS[i] * speed)
 	end
-	--EmitSfx(impactFoot, dirtfling)
 	--EmitSfx(impactFoot, footcrater)
 	Move(pelvis, y_axis, PELVIS_LIFT_HEIGHT, PELVIS_LIFT_SPEED*pelvisMult * speed)
 	Turn(torso, x_axis, 0, TORSO_TILT_SPEED * speed)
@@ -229,8 +238,8 @@ local function Walk()
 	
 	local first = true
 	while (true) do
-		Step(mainLeg, offLeg, lfoot, (first and 2) or 1)
-		Step(mainLeg, offLeg, rfoot, (first and 1.2) or 1)
+		Step(mainLeg, offLeg, (first and 2) or 1)
+		Step(mainLeg, offLeg, (first and 1.2) or 1)
 		first = false
 	end
 end
@@ -254,8 +263,32 @@ local function StopWalk()
 	Turn(larm, x_axis, 0, math.rad(10))
 end
 
+local function MoonwalkThread()
+	Signal(SIG_MOONWALK)
+	SetSignalMask(SIG_MOONWALK)
+	while true do
+		local _, _, _, speed = Spring.GetUnitVelocity(unitID)
+		if speed < 0.4 then
+			StartThread(StopWalk)
+		else
+			StartThread(Walk)
+		end
+		
+		local x, y, z = Spring.GetUnitPosition(unitID)
+		local h = Spring.GetGroundHeight(x, z)
+		if math.abs(h - y) < 0.01 then
+			return
+		end
+		Sleep(800)
+	end
+end
+
+function unmoonwalkFunc()
+	StartThread(MoonwalkThread)
+end
+
 function script.StartMoving()
-	if not jumpActive then
+	if not (jumpActive or Spring.GetUnitIsStunned(unitID)) then
 		StartThread(Walk)
 	end
 end
@@ -266,14 +299,16 @@ end
 
 -- Jumping
 local function PreJumpThread(turn, lineDist, flightDist, duration)
+	jumpWindup = true
 	script.StopMoving()
 	local speed = math.max(0.5, GG.att_MoveChange[unitID] or 1)
 	
 	DoRestore()
-	weaponBlocked = true
-	
-	local heading = -Spring.GetUnitHeading(unitID)*GG.Script.headingToRad
-	Spring.MoveCtrl.SetRotation(unitID, 0, heading, 0) -- keep current heading
+	if jumpWindup then
+		weaponBlocked = true
+		local heading = -Spring.GetUnitHeading(unitID)*GG.Script.headingToRad
+		Spring.MoveCtrl.SetRotation(unitID, 0, heading, 0) -- keep current heading
+	end
 	
 	local rotationRequired = -turn*GG.Script.headingToRad
 	local rotationFrames = math.ceil(math.abs(rotationRequired/JUMP_TURN_SPEED)/12/speed)*12
@@ -319,28 +354,33 @@ local function PreJumpThread(turn, lineDist, flightDist, duration)
 		end
 	end
 	
-	Spring.MoveCtrl.SetRotationVelocity(unitID, 0, 0, 0)
-	
-	for i,p in pairs(leftLeg) do
-		Turn(leftLeg[i], x_axis, 0, LEG_STEP_SPEEDS[i] * speed)
-		Turn(rightLeg[i], x_axis, 0, LEG_STEP_SPEEDS[i] * speed)
+	if jumpWindup then
+		Spring.MoveCtrl.SetRotationVelocity(unitID, 0, 0, 0)
+		for i,p in pairs(leftLeg) do
+			Turn(leftLeg[i], x_axis, 0, LEG_STEP_SPEEDS[i] * speed)
+			Turn(rightLeg[i], x_axis, 0, LEG_STEP_SPEEDS[i] * speed)
+		end
+		Move(pelvis, y_axis, 0, 8 * speed)
 	end
-	Move(pelvis, y_axis, 0, 8 * speed)
+	
 	if usingCanister then
 		MoveCanister(usingCanister, 1, 0, 3 / speed)
 	end
-	Sleep(600 / speed)
 	
-	for i,p in pairs(leftLeg) do
-		Turn(leftLeg[i], x_axis, 1.66*LEG_STEP_ANGLES[i], LEG_STEP_SPEEDS[i] * speed)
-		Turn(rightLeg[i], x_axis, 1.66*LEG_STEP_ANGLES[i], LEG_STEP_SPEEDS[i] * speed)
+	if jumpWindup then
+		Sleep(600 / speed)
+		
+		for i,p in pairs(leftLeg) do
+			Turn(leftLeg[i], x_axis, 1.66*LEG_STEP_ANGLES[i], LEG_STEP_SPEEDS[i] * speed)
+			Turn(rightLeg[i], x_axis, 1.66*LEG_STEP_ANGLES[i], LEG_STEP_SPEEDS[i] * speed)
+		end
+		Move(torso, y_axis, 0, 1 * speed)
+		Move(pelvis, y_axis, -20, 16 * speed)
+		Move(pelvis, z_axis, -10, 8 * speed)
+		Turn(torso, x_axis, math.rad(20), math.rad(30) * speed)
+		
+		Turn(pelvis, z_axis, 0, math.rad(30) * speed)
 	end
-	Move(torso, y_axis, 0, 1 * speed)
-	Move(pelvis, y_axis, -20, 16 * speed)
-	Move(pelvis, z_axis, -10, 8 * speed)
-	Turn(torso, x_axis, math.rad(20), math.rad(30) * speed)
-	
-	Turn(pelvis, z_axis, 0, math.rad(30) * speed)
 	
 	if usingCanister then
 		Sleep(1367) -- Timing is the essence of comedy
@@ -354,6 +394,7 @@ local function PreJumpThread(turn, lineDist, flightDist, duration)
 	end
 	--EmitSfx(lfoot, jetfeet)
 	--EmitSfx(rfoot, jetfeet)
+	jumpWindup = false
 end
 
 local function EndJumpThread()
@@ -431,6 +472,15 @@ end
 function endJump()
 	jumpActive = false
 	StartThread(EndJumpThread)
+end
+
+function cancelJump()
+	jumpWindup = false
+	jumpActive = false
+	weaponBlocked = false
+	Turn(torso, x_axis, 0, math.rad(10))
+	Move(pelvis, y_axis, 0, 5)
+	Move(pelvis, z_axis, 0, 3)
 end
 
 local function RestoreAfterDelay()

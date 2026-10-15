@@ -131,6 +131,7 @@ local Sounds = {
 			gainmod = 0,
 			pitch = 0.9,
 		},
+<<<<<<< HEAD
 		FirewalkerHit = {
 			file = "sounds/weapon/cannon/wolverine_hit.wav",
 			pitchmod = 0.008,
@@ -160,6 +161,12 @@ local Sounds = {
 			gainmod = 0.7,
 			pitchmod = 0,
 		},
+=======
+		HeatrayQuieter = {
+			file = "sounds/weapon/heatray_fire.wav",
+			gain = 0.5,
+		}
+>>>>>>> origin/master
 	},
 }
 

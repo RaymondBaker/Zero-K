@@ -458,6 +458,7 @@ function script.AimWeapon(num, heading, pitch)
 end
 
 function script.Create()
+	Hide(engineEmit)
 	Turn(dust1, x_axis, math.rad(90))
 	Turn(dust2, x_axis, math.rad(90))
 	StartThread(GG.Script.SmokeUnit, unitID, smokePiece)
@@ -475,11 +476,13 @@ end
 
 function script.Activate()
 	StartThread(TakeOffOrLand)
+	Show(engineEmit)
 end
 
 function script.Deactivate()
 	StartThread(TakeOffOrLand)
 	StartThread(closeDoors)
+	Hide(engineEmit)
 end
 
 
@@ -488,16 +491,25 @@ function script.QueryTransport(passengerID)
 end
 
 function script.AimFromWeapon(num)
+	if not weaponPieces[num] then
+		num = 3
+	end
 	return weaponPieces[num].aimFrom
 end
 
 function script.QueryWeapon(num)
+	if not weaponPieces[num] then
+		num = 3
+	end
 	local pieces = weaponPieces[num].query
 	return pieces[weaponPieces[num].index]
 end
 
 
 function script.Shot(num)
+	if not weaponPieces[num] then
+		num = 3
+	end
 	local index = weaponPieces[num].index
 	index = index + 1
 	if index > #(weaponPieces[num].query) then

@@ -229,7 +229,6 @@ local overrides = {
 	[CMD_EMBARK] = {caption = '', texture = imageDir .. 'Bold/embark.png'},
 	[CMD_DISEMBARK] = {caption = ' ', texture = imageDir .. 'Bold/disembark.png'},
 
-	[CMD_ONECLICK_WEAPON] = {},--texture = imageDir .. 'Bold/action.png'},
 	[CMD_UNIT_SET_TARGET] = {texture = imageDir .. 'Bold/action.png'},
 
 	[CMD_ABANDON_PW] = {caption= '', texture = 'LuaUI/Images/Crystal_Clear_action_flag_white.png'},
@@ -355,6 +354,7 @@ local custom_cmd_actions = {	-- states are 2, not states are 1
 	dontfireatradar=2,
 	antinukezone=2,
 	unitai=2,
+	loopattack=2,
 	unit_kill_subordinates=2,
 	goostate=1,
 	disableattack=2,
